@@ -75,6 +75,39 @@ const contractABI = [
 		"inputs": [
 			{
 				"internalType": "string",
+				"name": "_patientId",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_granteeId",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_accessLevel",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_duration",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "_status",
+				"type": "string"
+			}
+		],
+		"name": "manageConsent",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
 				"name": "",
 				"type": "string"
 			},
@@ -206,39 +239,6 @@ const contractABI = [
 		"inputs": [
 			{
 				"internalType": "string",
-				"name": "_patientId",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_granteeId",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_accessLevel",
-				"type": "string"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_duration",
-				"type": "uint256"
-			},
-			{
-				"internalType": "string",
-				"name": "_status",
-				"type": "string"
-			}
-		],
-		"name": "manageConsent",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "string",
 				"name": "",
 				"type": "string"
 			},
@@ -274,10 +274,10 @@ const contractABI = [
 		"stateMutability": "view",
 		"type": "function"
 	}
-];
-const contractAddress = '0xA8bF3F883D60D45Ee0cD9B1566E4DFa36104BBf3'; // The new address after deployment
-const senderAddress = '0x68a04fd4E12e1f111b1E276C9A12fF39Ae6D6B42';
-const privateKey = '0xceeaa6cd7eef19c4880963f57086379e685d4a8853b3574f7632e43c3f69453c';
+]
+const contractAddress = '0xf901a76D7ef180edb49c3289d8c8bE62BB42a5CE'; // The new address after deployment
+const senderAddress = '0x39920E5B400b5987173Ef3E1B5D6DDF56c8a2099';
+const privateKey = '0x2de2c3b40df9ad20f2624dfea02ff2901fb5dd3b5cb13d81f052df0ed4711a2b';
 // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
 const contract = new web3.eth.Contract(contractABI, contractAddress);
@@ -340,9 +340,16 @@ app.post('/api/doctor/register', async (req, res) => {
         const [existing] = await db.query('SELECT email FROM doctor WHERE email = ?', [email]);
         if (existing.length > 0) return res.status(409).json({ error: 'A doctor with this email already exists.' });
         const hashedPassword = await bcrypt.hash(password, 10);
-        const [result] = await db.query( 'INSERT INTO doctor (name, email, password, contact_number, specialization, availability_status, hospital_name) VALUES (?, ?, ?, ?, ?, ?, ?)', [name, email, hashedPassword, contact_number, specialization, availability_status, hospital_name] );
+        // We now explicitly set verification_status to 'Pending'
+        const [result] = await db.query(
+            'INSERT INTO doctor (name, email, password, contact_number, specialization, availability_status, hospital_name, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [name, email, hashedPassword, contact_number, specialization, availability_status, hospital_name, 'Pending']
+        );
         res.status(201).json({ message: 'Doctor registered successfully! Your registration is pending approval from the hospital.', doctorId: result.insertId });
-    } catch (error) { res.status(500).json({ error: 'Database error during doctor registration.' }); }
+    } catch (error) {
+        console.error('Doctor registration error:', error); // Log the actual error
+        res.status(500).json({ error: 'Database error during doctor registration.' });
+    }
 });
 app.post('/api/doctor/login', async (req, res) => {
     try {
@@ -698,3 +705,6 @@ const startServer = async () => {
 };
 
 startServer();
+
+
+// shiv

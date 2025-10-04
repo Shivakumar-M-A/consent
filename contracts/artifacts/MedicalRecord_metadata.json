@@ -1,0 +1,297 @@
+{
+	"compiler": {
+		"version": "0.8.19+commit.7dd6d404"
+	},
+	"language": "Solidity",
+	"output": {
+		"abi": [
+			{
+				"inputs": [
+					{
+						"internalType": "string",
+						"name": "_patientId",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "_doctorName",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "_disease",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "_cid",
+						"type": "string"
+					},
+					{
+						"internalType": "uint256",
+						"name": "_timestamp",
+						"type": "uint256"
+					}
+				],
+				"name": "addPrescription",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "string",
+						"name": "",
+						"type": "string"
+					},
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"name": "consentLog",
+				"outputs": [
+					{
+						"internalType": "string",
+						"name": "granteeId",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "accessLevel",
+						"type": "string"
+					},
+					{
+						"internalType": "uint256",
+						"name": "duration",
+						"type": "uint256"
+					},
+					{
+						"internalType": "string",
+						"name": "status",
+						"type": "string"
+					},
+					{
+						"internalType": "uint256",
+						"name": "timestamp",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "string",
+						"name": "_patientId",
+						"type": "string"
+					}
+				],
+				"name": "getConsentLog",
+				"outputs": [
+					{
+						"components": [
+							{
+								"internalType": "string",
+								"name": "granteeId",
+								"type": "string"
+							},
+							{
+								"internalType": "string",
+								"name": "accessLevel",
+								"type": "string"
+							},
+							{
+								"internalType": "uint256",
+								"name": "duration",
+								"type": "uint256"
+							},
+							{
+								"internalType": "string",
+								"name": "status",
+								"type": "string"
+							},
+							{
+								"internalType": "uint256",
+								"name": "timestamp",
+								"type": "uint256"
+							}
+						],
+						"internalType": "struct MedicalRecord.Consent[]",
+						"name": "",
+						"type": "tuple[]"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "string",
+						"name": "_patientId",
+						"type": "string"
+					}
+				],
+				"name": "getHistory",
+				"outputs": [
+					{
+						"components": [
+							{
+								"internalType": "string",
+								"name": "doctorName",
+								"type": "string"
+							},
+							{
+								"internalType": "string",
+								"name": "disease",
+								"type": "string"
+							},
+							{
+								"internalType": "string",
+								"name": "cid",
+								"type": "string"
+							},
+							{
+								"internalType": "uint256",
+								"name": "timestamp",
+								"type": "uint256"
+							}
+						],
+						"internalType": "struct MedicalRecord.Prescription[]",
+						"name": "",
+						"type": "tuple[]"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "string",
+						"name": "_patientId",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "_granteeId",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "_accessLevel",
+						"type": "string"
+					},
+					{
+						"internalType": "uint256",
+						"name": "_duration",
+						"type": "uint256"
+					},
+					{
+						"internalType": "string",
+						"name": "_status",
+						"type": "string"
+					}
+				],
+				"name": "manageConsent",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "string",
+						"name": "",
+						"type": "string"
+					},
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"name": "records",
+				"outputs": [
+					{
+						"internalType": "string",
+						"name": "doctorName",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "disease",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "cid",
+						"type": "string"
+					},
+					{
+						"internalType": "uint256",
+						"name": "timestamp",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			}
+		],
+		"devdoc": {
+			"details": "A smart contract to store medical record metadata and manage patient consent. The actual medical files are stored on IPFS, and this contract only stores the IPFS CID (Content ID) along with other metadata and consent logs.",
+			"kind": "dev",
+			"methods": {
+				"addPrescription(string,string,string,string,uint256)": {
+					"details": "Adds a new prescription record for a given patient. This is a \"write\" operation and will cost gas to execute."
+				},
+				"getConsentLog(string)": {
+					"details": "Retrieves the entire consent history for a given patient. This is a \"view\" (read-only) function, so it does not cost any gas to call."
+				},
+				"getHistory(string)": {
+					"details": "Retrieves the entire medical history for a given patient. This is a \"view\" function. Access control is handled by the backend."
+				},
+				"manageConsent(string,string,string,uint256,string)": {
+					"details": "Adds a new consent entry to the patient's log. Can be used for granting or revoking. This is a \"write\" operation and will cost gas to execute."
+				}
+			},
+			"title": "MedicalRecord",
+			"version": 1
+		},
+		"userdoc": {
+			"kind": "user",
+			"methods": {},
+			"version": 1
+		}
+	},
+	"settings": {
+		"compilationTarget": {
+			"MedicalRecord.sol": "MedicalRecord"
+		},
+		"evmVersion": "paris",
+		"libraries": {},
+		"metadata": {
+			"bytecodeHash": "ipfs"
+		},
+		"optimizer": {
+			"enabled": false,
+			"runs": 200
+		},
+		"remappings": []
+	},
+	"sources": {
+		"MedicalRecord.sol": {
+			"keccak256": "0xa3fac826a79be87d9e22f0a98942b3801db62a86271d28252a13acbc0a56d42b",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://73c87925b0ea8b51fde125c86f767aa8ae2e9a094256d9f44030fbeec166f613",
+				"dweb:/ipfs/QmQQVV1qduqF4XSvhSwV9M1hwCqkQgYZWcuTGjDEsM9L2J"
+			]
+		}
+	},
+	"version": 1
+}

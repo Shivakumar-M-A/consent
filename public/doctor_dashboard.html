@@ -117,12 +117,10 @@
                 document.getElementById('appointments-table-body').innerHTML = '<tr><td colspan="5" class="text-center text-danger p-4">Error loading appointments. Please try again later.</td></tr>';
             });
 
-            document.getElementById('logout-btn').addEventListener('click', () => {
-                localStorage.removeItem('token');
-                alert("You have been logged out.");
-                // In a real app, redirect to the main page or login page
-                // window.location.href = '/index.html'; 
-            });
+         document.getElementById('logout-btn').addEventListener('click', () => {
+            localStorage.removeItem('token');
+            window.location.href = '/index.html';
+        });
         });
     </script>
 </body>
