@@ -9,10 +9,13 @@ const fs = require('fs');
 const crypto = require('crypto');
 const cors = require('cors'); 
 const { Web3 } = require('web3');
+const { GoogleGenerativeAI } = require("@google/generative-ai"); // --- ADDED: Official Google AI SDK
 require('dotenv').config();
 
 // --- INITIALIZATIONS ---
 const app = express();
+// Initialize the Google AI Client
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // --- MIDDLEWARE ---
 app.use(cors());
@@ -36,7 +39,6 @@ let ipfs;
 const web3 = new Web3('http://127.0.0.1:7545'); 
 
 // ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
-// TODO: IMPORTANT! Update these details after you re-deploy the new smart contract.
 const contractABI = [
 	{
 		"inputs": [
@@ -274,10 +276,10 @@ const contractABI = [
 		"stateMutability": "view",
 		"type": "function"
 	}
-]
-const contractAddress = '0x341423aeba236CC886A442DEbD7C4dc497Ac43A8'; // The new address after deployment
-const senderAddress = '0x39920E5B400b5987173Ef3E1B5D6DDF56c8a2099';
-const privateKey = '0x2de2c3b40df9ad20f2624dfea02ff2901fb5dd3b5cb13d81f052df0ed4711a2b';
+];
+const contractAddress = '0x56D4D335183a96365Cb62862a35871a6d8A0B124'; // The new address after deployment
+const senderAddress = '0xf3dCb83f692E50145055b6b241B88c6f98D8ce99';
+const privateKey = '0x520f22b03f93599f38a90a6e0c8494950c0f754c7c5f5f659687b61f2d77375e';
 // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
 const contract = new web3.eth.Contract(contractABI, contractAddress);
@@ -287,6 +289,22 @@ const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 const upload = multer({ dest: uploadDir });
 const JWT_SECRET = process.env.JWT_SECRET || 'a-very-secure-secret-key-for-jwt';
+
+// --- [REVISED] Gemini API Helper using @google/genai ---
+async function callGeminiApi(prompt) {
+    try {
+        if (!process.env.GEMINI_API_KEY) {
+            throw new Error("GEMINI_API_KEY is not set in the .env file.");
+        }
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+    } catch (error) {
+        console.error("Error calling Gemini API:", error);
+        throw new Error("Failed to get response from the AI model.");
+    }
+}
 
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -340,14 +358,13 @@ app.post('/api/doctor/register', async (req, res) => {
         const [existing] = await db.query('SELECT email FROM doctor WHERE email = ?', [email]);
         if (existing.length > 0) return res.status(409).json({ error: 'A doctor with this email already exists.' });
         const hashedPassword = await bcrypt.hash(password, 10);
-        // We now explicitly set verification_status to 'Pending'
         const [result] = await db.query(
             'INSERT INTO doctor (name, email, password, contact_number, specialization, availability_status, hospital_name, verification_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             [name, email, hashedPassword, contact_number, specialization, availability_status, hospital_name, 'Pending']
         );
         res.status(201).json({ message: 'Doctor registered successfully! Your registration is pending approval from the hospital.', doctorId: result.insertId });
     } catch (error) {
-        console.error('Doctor registration error:', error); // Log the actual error
+        console.error('Doctor registration error:', error);
         res.status(500).json({ error: 'Database error during doctor registration.' });
     }
 });
@@ -505,16 +522,87 @@ app.get('/api/my-appointments', authenticateToken, async (req, res) => {
     } catch (error) { res.status(500).json({ error: 'Failed to fetch your appointments.' }); }
 });
 
-// --- DECENTRALIZED MEDICAL RECORD & CONSENT ROUTES ---
+// --- AI-Powered Prescription Analysis Route ---
+app.post('/api/ai/analyze-prescription/:patientId', authenticateToken, async (req, res) => {
+    if (req.user.type !== 'doctor') return res.status(403).json({ error: 'Forbidden' });
 
-// --- [NEW] Patient Prescription Route ---
+    try {
+        const { patientId } = req.params;
+        const { draftPrescription } = req.body;
+
+        const records = await contract.methods.getHistory(patientId).call({ from: senderAddress });
+        let rawHistory = "No past medical history found for this patient.";
+
+        if (records && records.length > 0) {
+            const historyRecords = await Promise.all(records.map(async rec => {
+                let data = '';
+                try {
+                    const chunks = [];
+                    for await (const chunk of ipfs.cat(rec.cid)) { chunks.push(chunk); }
+                    data = Buffer.concat(chunks).toString('utf8');
+                } catch (err) {
+                    data = `[Content for CID ${rec.cid} could not be retrieved]`;
+                }
+                return `- On ${new Date(parseInt(rec.timestamp.toString())).toLocaleDateString()}, Dr. ${rec.doctorName} diagnosed "${rec.disease}" and prescribed: "${data}".`;
+            }));
+            rawHistory = historyRecords.join('\n');
+        }
+
+        const summarizationPrompt = `
+            You are a medical AI assistant. Your task is to summarize a patient's medical history. 
+            Analyze the following unstructured medical records and provide a concise, categorized summary.
+            Categories should include: Diagnosed Conditions, Prescribed Medications (with dosages if available), and Dates of Service.
+            
+            Medical History:
+            ---
+            ${rawHistory}
+            ---
+        `;
+        const historySummary = await callGeminiApi(summarizationPrompt);
+
+        const analysisPrompt = `
+            You are a clinical decision support AI. Your role is to help a doctor write a safe and effective prescription.
+            
+            Here is the patient's summarized medical history:
+            ---
+            ${historySummary}
+            ---
+            
+            Here is the doctor's current draft prescription for a new diagnosis:
+            ---
+            "${draftPrescription}"
+            ---
+
+            Based on the patient's history, please perform the following analysis:
+            1.  **Potential Issues**: Identify any potential drug interactions, contraindications, or dosage concerns based on past medications or conditions.
+            2.  **Suggested Modifications**: Recommend specific changes to the draft prescription to improve safety or efficacy. This could include different drugs, adjusted dosages, or additional monitoring instructions.
+            3.  **Rewritten Prescription**: Provide a final, rewritten version of the prescription that incorporates your suggestions. If no changes are needed, state that the draft prescription appears appropriate.
+
+            Present the output clearly under the headings: "Potential Issues", "Suggested Modifications", and "Rewritten Prescription".
+            KEEP IT SHORT AS POSSIBLE
+        `;
+        const prescriptionAnalysis = await callGeminiApi(analysisPrompt);
+
+        res.json({
+            historySummary: historySummary,
+            prescriptionAnalysis: prescriptionAnalysis,
+        });
+
+    } catch (e) {
+        console.error("API Error in /api/ai/analyze-prescription:", e);
+        res.status(500).json({ error: 'Failed to perform AI analysis. ' + e.message });
+    }
+});
+
+
+// --- DECENTRALIZED MEDICAL RECORD & CONSENT ROUTES ---
 app.get('/api/my-prescriptions', authenticateToken, async (req, res) => {
     if (req.user.type !== 'patient') return res.status(403).json({ error: 'Forbidden' });
     try {
         const patientId = req.user.id.toString();
         const records = await contract.methods.getHistory(patientId).call({ from: senderAddress });
         if (!records || records.length === 0) {
-            return res.json([]); // Return empty array if no records
+            return res.json([]); 
         }
         const results = await Promise.all(records.map(async rec => {
             let data = '';
@@ -533,14 +621,13 @@ app.get('/api/my-prescriptions', authenticateToken, async (req, res) => {
                 data: data,
             };
         }));
-        res.json(results.reverse()); // Show most recent first
+        res.json(results.reverse());
     } catch (e) {
         console.error("API Error in /api/my-prescriptions:", e);
         res.status(500).json({ error: e.message });
     }
 });
 
-// --- Prescription Route ---
 app.post('/api/prescription', authenticateToken, upload.single('file'), async (req, res) => {
     if (req.user.type !== 'doctor') return res.status(403).json({ error: 'Forbidden' });
     try {
@@ -705,6 +792,3 @@ const startServer = async () => {
 };
 
 startServer();
-
-
-// shiv
