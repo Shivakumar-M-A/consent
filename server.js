@@ -1,4 +1,4 @@
-// --- DEPENDENCIES ---
+// --- CORE DEPENDENCIES ---
 const express = require('express');
 const mysql = require('mysql2');
 const bcrypt = require('bcryptjs');
@@ -9,15 +9,15 @@ const fs = require('fs');
 const crypto = require('crypto');
 const cors = require('cors'); 
 const { Web3 } = require('web3');
-const { GoogleGenerativeAI } = require("@google/generative-ai"); // --- ADDED: Official Google AI SDK
-require('dotenv').config();
+const { GoogleGenerativeAI } = require("@google/generative-ai"); // Official Google AI SDK
+require('dotenv').config(); // Loads environment variables from .env file
 
 // --- INITIALIZATIONS ---
 const app = express();
-// Initialize the Google AI Client
+// Securely initialize the Google AI Client using the API key from your .env file
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// --- MIDDLEWARE ---
+// --- MIDDLEWARE SETUP ---
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -35,10 +35,9 @@ const db = mysql.createPool({
 }).promise();
 
 // --- IPFS & BLOCKCHAIN SETUP ---
-let ipfs;
+let ipfs; // IPFS is initialized asynchronously at server startup
 const web3 = new Web3('http://127.0.0.1:7545'); 
 
-// ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
 const contractABI = [
 	{
 		"inputs": [
@@ -280,8 +279,6 @@ const contractABI = [
 const contractAddress = '0x56D4D335183a96365Cb62862a35871a6d8A0B124'; // The new address after deployment
 const senderAddress = '0xf3dCb83f692E50145055b6b241B88c6f98D8ce99';
 const privateKey = '0x520f22b03f93599f38a90a6e0c8494950c0f754c7c5f5f659687b61f2d77375e';
-// ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
-
 const contract = new web3.eth.Contract(contractABI, contractAddress);
 
 // --- FILE UPLOAD & JWT SETUP ---
@@ -290,22 +287,7 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 const upload = multer({ dest: uploadDir });
 const JWT_SECRET = process.env.JWT_SECRET || 'a-very-secure-secret-key-for-jwt';
 
-// --- [REVISED] Gemini API Helper using @google/genai ---
-async function callGeminiApi(prompt) {
-    try {
-        if (!process.env.GEMINI_API_KEY) {
-            throw new Error("GEMINI_API_KEY is not set in the .env file.");
-        }
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        return response.text();
-    } catch (error) {
-        console.error("Error calling Gemini API:", error);
-        throw new Error("Failed to get response from the AI model.");
-    }
-}
-
+// --- AUTHENTICATION MIDDLEWARE ---
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -318,6 +300,34 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+// ============================= //
+// === AI INTEGRATION MODULE === //
+// ============================= //
+
+/**
+ * A robust helper function to call the Gemini API using the official SDK.
+ * @param {string} prompt The text prompt to send to the AI model.
+ * @returns {Promise<string>} The text response from the AI model.
+ */
+async function callGeminiApi(prompt) {
+    try {
+        if (!process.env.GEMINI_API_KEY) {
+            throw new Error("CRITICAL: GEMINI_API_KEY is not configured in the .env file.");
+        }
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+    } catch (error) {
+        console.error("Error communicating with Gemini API:", error);
+        // Check for specific authentication errors to provide a clearer message
+        if (error.message.includes('API key not valid')) {
+            throw new Error("The Gemini API key is invalid. Please check your .env file.");
+        }
+        throw new Error("Failed to get a valid response from the AI model.");
+    }
+}
+
 // ======================= //
 // === FRONTEND ROUTES === //
 // ======================= //
@@ -328,6 +338,146 @@ app.get('/', (req, res) => {
 // ================== //
 // === API ROUTES === //
 // ================== //
+
+// --- AI-POWERED PRESCRIPTION ANALYSIS ROUTE ---
+app.post('/api/ai/analyze-prescription/:patientId', authenticateToken, async (req, res) => {
+    // Ensure the user is a doctor
+    if (req.user.type !== 'doctor') {
+        return res.status(403).json({ error: 'Forbidden: This action is restricted to doctors.' });
+    }
+
+    try {
+        const { patientId } = req.params;
+        const { draftPrescription } = req.body;
+
+        // Step 1: Fetch patient's medical history from the blockchain
+        const records = await contract.methods.getHistory(patientId).call({ from: senderAddress });
+        let rawHistory = "No past medical history found for this patient.";
+
+        if (records && records.length > 0) {
+            const historyRecords = await Promise.all(records.map(async (rec) => {
+                let data = '';
+                try {
+                    // Fetch prescription details from IPFS
+                    const chunks = [];
+                    for await (const chunk of ipfs.cat(rec.cid)) {
+                        chunks.push(chunk);
+                    }
+                    data = Buffer.concat(chunks).toString('utf8');
+                } catch (err) {
+                    console.error(`IPFS fetch error for CID ${rec.cid}:`, err);
+                    data = `[Content for CID ${rec.cid} could not be retrieved from IPFS]`;
+                }
+                return `- On ${new Date(parseInt(rec.timestamp.toString())).toLocaleDateString()}, Dr. ${rec.doctorName} diagnosed "${rec.disease}" and prescribed: "${data}".`;
+            }));
+            rawHistory = historyRecords.join('\n');
+        }
+
+        // Step 2: Generate a concise summary of the patient's history using the AI
+        const summarizationPrompt = `
+            You are a medical AI assistant. Your task is to summarize a patient's medical history. 
+            Analyze the following unstructured medical records and provide a concise, categorized summary.
+            Categories should include: Diagnosed Conditions, Prescribed Medications (with dosages if available), and Dates of Service.
+            
+            Medical History:
+            ---
+            ${rawHistory}
+            ---
+        `;
+        const historySummary = await callGeminiApi(summarizationPrompt);
+        
+        // Step 3: Analyze the doctor's draft prescription against the summarized history
+        const analysisPrompt = `
+            You are a clinical decision support AI. Your role is to help a doctor write a safe and effective prescription.
+            
+            Here is the patient's summarized medical history:
+            ---
+            ${historySummary}
+            ---
+            
+            Here is the doctor's current draft prescription for a new diagnosis:
+            ---
+            "${draftPrescription}"
+            ---
+
+            Based on the patient's history, please perform the following analysis:
+            1.  **Potential Issues**: Identify any potential drug interactions, contraindications, or dosage concerns based on past medications or conditions.
+            2.  **Suggested Modifications**: Recommend specific changes to the draft prescription to improve safety or efficacy. This could include different drugs, adjusted dosages, or additional monitoring instructions.
+            3.  **Rewritten Prescription**: Provide a final, rewritten version of the prescription that incorporates your suggestions. If no changes are needed, state that the draft prescription appears appropriate.
+
+            Present the output clearly under the headings: "Potential Issues", "Suggested Modifications", and "Rewritten Prescription".
+        `;
+        const prescriptionAnalysis = await callGeminiApi(analysisPrompt);
+        
+        // Step 4: Send the structured AI response back to the doctor's dashboard
+        res.json({
+            historySummary,
+            prescriptionAnalysis,
+        });
+
+    } catch (e) {
+        console.error("Error in /api/ai/analyze-prescription:", e);
+        res.status(500).json({ error: 'An internal server error occurred during AI analysis. ' + e.message });
+    }
+});
+
+// --- [NEW] AI ROUTE FOR FULL HISTORY SUMMARY (DOCTOR) ---
+app.post('/api/ai/summarize-full-history', authenticateToken, async (req, res) => {
+    if (req.user.type !== 'doctor') {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+    try {
+        const { fullHistory } = req.body;
+        if (!fullHistory) {
+            return res.status(400).json({ error: 'No history provided.' });
+        }
+        const prompt = `
+            You are a medical AI assistant. Summarize the following complete medical history for a physician. 
+            Focus on creating a high-level overview, identifying chronic conditions, major acute events, and recurring prescriptions.
+            Keep it concise and well-structured.
+
+            Medical History:
+            ---
+            ${fullHistory}
+            ---
+        `;
+        const summary = await callGeminiApi(prompt);
+        res.json({ summary });
+    } catch (e) {
+        console.error("Error in /api/ai/summarize-full-history:", e);
+        res.status(500).json({ error: 'Failed to summarize history. ' + e.message });
+    }
+});
+
+// --- [NEW] AI ROUTE FOR SINGLE PRESCRIPTION SUMMARY (PATIENT) ---
+app.post('/api/ai/summarize-single-prescription', authenticateToken, async (req, res) => {
+    // Accessible by patients
+    if (req.user.type !== 'patient') {
+         return res.status(403).json({ error: 'Forbidden' });
+    }
+    try {
+        const { prescriptionText } = req.body;
+        if (!prescriptionText) {
+            return res.status(400).json({ error: 'No prescription text provided.' });
+        }
+        const prompt = `
+            You are a helpful AI assistant. Explain the following medical prescription to a patient in simple, clear, and easy-to-understand terms.
+            Do not provide medical advice, but explain what each part of the prescription means.
+            Structure your explanation under these headings: "What it is for", "How to take it", and "Important notes".
+
+            Prescription:
+            ---
+            ${prescriptionText}
+            ---
+        `;
+        const summary = await callGeminiApi(prompt);
+        res.json({ summary });
+    } catch (e) {
+        console.error("Error in /api/ai/summarize-single-prescription:", e);
+        res.status(500).json({ error: 'Failed to summarize prescription. ' + e.message });
+    }
+});
+
 
 // --- AUTH ROUTES ---
 app.post('/api/patient/register', async (req, res) => {
@@ -522,78 +672,6 @@ app.get('/api/my-appointments', authenticateToken, async (req, res) => {
     } catch (error) { res.status(500).json({ error: 'Failed to fetch your appointments.' }); }
 });
 
-// --- AI-Powered Prescription Analysis Route ---
-app.post('/api/ai/analyze-prescription/:patientId', authenticateToken, async (req, res) => {
-    if (req.user.type !== 'doctor') return res.status(403).json({ error: 'Forbidden' });
-
-    try {
-        const { patientId } = req.params;
-        const { draftPrescription } = req.body;
-
-        const records = await contract.methods.getHistory(patientId).call({ from: senderAddress });
-        let rawHistory = "No past medical history found for this patient.";
-
-        if (records && records.length > 0) {
-            const historyRecords = await Promise.all(records.map(async rec => {
-                let data = '';
-                try {
-                    const chunks = [];
-                    for await (const chunk of ipfs.cat(rec.cid)) { chunks.push(chunk); }
-                    data = Buffer.concat(chunks).toString('utf8');
-                } catch (err) {
-                    data = `[Content for CID ${rec.cid} could not be retrieved]`;
-                }
-                return `- On ${new Date(parseInt(rec.timestamp.toString())).toLocaleDateString()}, Dr. ${rec.doctorName} diagnosed "${rec.disease}" and prescribed: "${data}".`;
-            }));
-            rawHistory = historyRecords.join('\n');
-        }
-
-        const summarizationPrompt = `
-            You are a medical AI assistant. Your task is to summarize a patient's medical history. 
-            Analyze the following unstructured medical records and provide a concise, categorized summary.
-            Categories should include: Diagnosed Conditions, Prescribed Medications (with dosages if available), and Dates of Service.
-            
-            Medical History:
-            ---
-            ${rawHistory}
-            ---
-        `;
-        const historySummary = await callGeminiApi(summarizationPrompt);
-
-        const analysisPrompt = `
-            You are a clinical decision support AI. Your role is to help a doctor write a safe and effective prescription.
-            
-            Here is the patient's summarized medical history:
-            ---
-            ${historySummary}
-            ---
-            
-            Here is the doctor's current draft prescription for a new diagnosis:
-            ---
-            "${draftPrescription}"
-            ---
-
-            Based on the patient's history, please perform the following analysis:
-            1.  **Potential Issues**: Identify any potential drug interactions, contraindications, or dosage concerns based on past medications or conditions.
-            2.  **Suggested Modifications**: Recommend specific changes to the draft prescription to improve safety or efficacy. This could include different drugs, adjusted dosages, or additional monitoring instructions.
-            3.  **Rewritten Prescription**: Provide a final, rewritten version of the prescription that incorporates your suggestions. If no changes are needed, state that the draft prescription appears appropriate.
-
-            Present the output clearly under the headings: "Potential Issues", "Suggested Modifications", and "Rewritten Prescription".
-            KEEP IT SHORT AS POSSIBLE
-        `;
-        const prescriptionAnalysis = await callGeminiApi(analysisPrompt);
-
-        res.json({
-            historySummary: historySummary,
-            prescriptionAnalysis: prescriptionAnalysis,
-        });
-
-    } catch (e) {
-        console.error("API Error in /api/ai/analyze-prescription:", e);
-        res.status(500).json({ error: 'Failed to perform AI analysis. ' + e.message });
-    }
-});
-
 
 // --- DECENTRALIZED MEDICAL RECORD & CONSENT ROUTES ---
 app.get('/api/my-prescriptions', authenticateToken, async (req, res) => {
@@ -664,7 +742,6 @@ app.post('/api/prescription', authenticateToken, upload.single('file'), async (r
     }
 });
 
-// --- Consent Management Routes ---
 app.post('/api/consent', authenticateToken, async (req, res) => {
     if (req.user.type !== 'patient') return res.status(403).json({ error: 'Forbidden' });
     try {
@@ -714,8 +791,6 @@ app.get('/api/consent-log', authenticateToken, async (req, res) => {
     }
 });
 
-
-// --- Medical History Route with Consent Check ---
 app.get('/api/history/:patientId', authenticateToken, async (req, res) => {
     if (req.user.type !== 'doctor') return res.status(403).json({ error: 'Forbidden: Only doctors can view patient history.' });
     
