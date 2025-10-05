@@ -75,39 +75,6 @@ const contractABI = [
 		"inputs": [
 			{
 				"internalType": "string",
-				"name": "_patientId",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_granteeId",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_accessLevel",
-				"type": "string"
-			},
-			{
-				"internalType": "uint256",
-				"name": "_duration",
-				"type": "uint256"
-			},
-			{
-				"internalType": "string",
-				"name": "_status",
-				"type": "string"
-			}
-		],
-		"name": "manageConsent",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "string",
 				"name": "",
 				"type": "string"
 			},
@@ -239,6 +206,39 @@ const contractABI = [
 		"inputs": [
 			{
 				"internalType": "string",
+				"name": "_patientId",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_granteeId",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_accessLevel",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_duration",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "_status",
+				"type": "string"
+			}
+		],
+		"name": "manageConsent",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
 				"name": "",
 				"type": "string"
 			},
@@ -275,7 +275,7 @@ const contractABI = [
 		"type": "function"
 	}
 ]
-const contractAddress = '0xf901a76D7ef180edb49c3289d8c8bE62BB42a5CE'; // The new address after deployment
+const contractAddress = '0x341423aeba236CC886A442DEbD7C4dc497Ac43A8'; // The new address after deployment
 const senderAddress = '0x39920E5B400b5987173Ef3E1B5D6DDF56c8a2099';
 const privateKey = '0x2de2c3b40df9ad20f2624dfea02ff2901fb5dd3b5cb13d81f052df0ed4711a2b';
 // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
